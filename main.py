@@ -12,28 +12,21 @@ from tf_agents.utils import common
 
 
 window_size = 10
-
-fc_layer_params = (100,)
+fc_layer_params = (128,128,)
 
 collect_steps_per_iteration = 1
-replay_buffer_max_length = 100000
-
 num_eval_episodes = 1
 
+replay_buffer_max_length = 100000
 learning_rate = 1e-3
 
 checkpoint_dir = 'checkpoint'
 policy_dir = 'policy'
 
+data_path = 'data/AAPL.csv'
 log_path = 'log/log.csv'
 
-
-df = pd.read_csv('data/AAPL.csv')
-
-env = gym_wrapper.GymWrapper(gym.make('stocks-v0', df=df, window_size=window_size, frame_bound=(window_size, len(df))))
-
-train_env = tf_py_environment.TFPyEnvironment(env)
-eval_env = tf_py_environment.TFPyEnvironment(env)
+env_name = 'stocks-v0'
 
 
 def compute_avg_return(environment, policy, num_episodes=10):
@@ -65,6 +58,14 @@ def render_env(py_environment, tf_environment, policy, num_episodes=10):
 
     py_environment.close()
     tf_environment.close()
+
+
+df = pd.read_csv(data_path)
+
+env = gym_wrapper.GymWrapper(gym.make(env_name, df=df, window_size=window_size, frame_bound=(window_size, len(df))))
+
+train_env = tf_py_environment.TFPyEnvironment(env)
+eval_env = tf_py_environment.TFPyEnvironment(env)
 
 
 q_net = q_network.QNetwork(train_env.observation_spec(), train_env.action_spec(), fc_layer_params=fc_layer_params)
