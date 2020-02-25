@@ -1,3 +1,5 @@
+from __future__ import absolute_import, division, print_function, unicode_literals
+
 import argparse
 import shutil
 import tensorflow as tf
@@ -13,20 +15,20 @@ from tf_agents.utils import common
 from main import *
 
 
-num_iterations = 10000
-batch_size = 64
+num_iterations = 5000
+batch_size = 256
+
+collect_steps_per_iteration = 1
 
 log_interval = 100
 eval_interval = 1000
 
 
 arg_parser = argparse.ArgumentParser()
-arg_parser.add_argument('--init', default=False, action='store_true')
 arg_parser.add_argument('--iter', type=int, default=num_iterations)
 arg_parser.add_argument('--batch', type=int, default=batch_size)
-
 args = arg_parser.parse_args()
-init = args.init
+
 num_iterations = args.iter
 batch_size = args.batch
 
@@ -35,8 +37,6 @@ replay_buffer = tf_uniform_replay_buffer.TFUniformReplayBuffer(data_spec=agent.c
 
 collect_driver = dynamic_step_driver.DynamicStepDriver(train_env, agent.collect_policy, observers=[replay_buffer.add_batch], num_steps=collect_steps_per_iteration)
 
-if init:
-    shutil.rmtree(checkpoint_dir)
 train_checkpointer = common.Checkpointer(ckpt_dir=checkpoint_dir, max_to_keep=1, agent=agent, policy=agent.policy, replay_buffer=replay_buffer, global_step=global_step)
 train_checkpointer.initialize_or_restore()
 
@@ -50,18 +50,13 @@ dataset = replay_buffer.as_dataset(num_parallel_calls=3, sample_batch_size=batch
 iterator = iter(dataset)
 
 
-if init:
-    steps = [agent.train_step_counter.numpy()]
-    avg_return = compute_avg_return(eval_env, agent.policy, num_eval_episodes)
-    print('Average Return: {}'.format(avg_return))
-    returns = [avg_return]
-
-    tf_policy_saver.save(policy_dir)
-else:
+try:
     log = pd.read_csv(log_path)
     steps = log['step'].tolist()
-    returns = log['avg return'].tolist()
-    print('Average Return: {}'.format(returns[-1]))
+    rewards = log['avg reward'].tolist()
+except:
+    steps = []
+    rewards = []
 
 
 agent.train = common.function(agent.train)
@@ -76,21 +71,27 @@ for _ in range(num_iterations):
     step = agent.train_step_counter.numpy()
 
     if step % log_interval == 0:
-        print('step {}: loss = {}'.format(step, train_loss))
+        print('step {}: loss = {:.6f}'.format(step, train_loss))
 
     if step % eval_interval == 0:
-        avg_return = compute_avg_return(eval_env, agent.policy, num_eval_episodes)
+        avg_reward = eval_policy(agent.policy)
 
-        if avg_return > max(returns):
+        print('average reward: {:.6f}'.format(avg_reward))
+
+        if not rewards or avg_reward > max(rewards):
             tf_policy_saver.save(policy_dir)
 
         steps.append(step)
-        returns.append(avg_return)
-
-        print('Average Return: {}'.format(avg_return))
+        rewards.append(avg_reward)
 
 
 train_checkpointer.save(global_step)
 
-log = pd.DataFrame({'step': steps, 'avg return': returns})
+log = pd.DataFrame({'step': steps, 'avg reward': rewards})
 log.to_csv(log_path)
+
+plt.plot(steps, rewards)
+plt.ylabel('avg reward')
+plt.xlabel('step')
+plt.tight_layout()
+plt.show()
