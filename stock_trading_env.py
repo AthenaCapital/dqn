@@ -28,15 +28,19 @@ class StockTradingEnv(gym.Env):
 
     metadata = {'render.modes': ['human']}
 
-    def __init__(self, df, window_size):
+    def __init__(self, df, window_size, eval=False):
         self.df = df
         self.window_size = window_size
+        self.eval = eval
 
         self.date_times, self.prices, self.features = self.process_data()
+        self.market_open_indices = self.get_market_open_indices()
+
         self.observation_shape = (self.window_size, self.features.shape[1])
         self.action_space = spaces.Discrete(len(Actions))
         self.observation_space = spaces.Box(low=-np.inf, high=np.inf, shape=self.observation_shape, dtype=np.float32)
 
+        self.episode = None
         self.start_tick = None
         self.end_tick = None
         self.done = None
@@ -49,6 +53,7 @@ class StockTradingEnv(gym.Env):
 
 
     def reset(self):
+        self.episode = self.get_episode()
         self.start_tick, self.end_tick = self.get_tick_window()
         self.done = False
         self.current_tick = self.start_tick
@@ -57,6 +62,7 @@ class StockTradingEnv(gym.Env):
         self.position_history = [self.position]
         self.holdings = 1
         self.total_reward = 0
+
         return self.get_observation()
 
 
@@ -92,7 +98,6 @@ class StockTradingEnv(gym.Env):
 
 
     def render(self, mode='human'):
-
         plt.plot(self.prices[self.start_tick - self.window_size:self.end_tick])
 
         short_ticks = []
@@ -103,10 +108,10 @@ class StockTradingEnv(gym.Env):
             else:
                 long_ticks.append(self.start_tick + i)
 
-        plt.plot(short_ticks, self.prices[short_ticks], 'r.')
-        plt.plot(long_ticks, self.prices[long_ticks], 'g.')
+        plt.plot(short_ticks, self.prices[short_ticks], 'ro')
+        plt.plot(long_ticks, self.prices[long_ticks], 'go')
 
-        plt.suptitle("total reward: {:.6f}".format(self.total_reward))
+        plt.title("total reward: {:.6f}".format(self.total_reward))
 
         plt.show()
 
@@ -122,19 +127,35 @@ class StockTradingEnv(gym.Env):
 
         return date_times, prices, features
 
-    def get_tick_window(self):
-        market_open_indexes = []
+
+    def get_market_open_indices(self):
+        market_open_indices = []
         for i in range(0, len(self.date_times), 30):
             if self.date_times[i].time() == time(hour=9, minute=30, second=0):
-                market_open_indexes.append(i)
+                market_open_indices.append(i)
 
-        market_open = random.randrange(len(market_open_indexes))
-        market_open_index = market_open_indexes[market_open]
+        return market_open_indices
 
-        if market_open == len(market_open_indexes) - 1:
+
+    def get_episode(self):
+        if self.eval:
+            if self.episode == None or self.episode == len(self.market_open_indices) - 1:
+                episode = 0
+            else:
+                episode = self.episode + 1
+        else:
+            episode = random.randrange(len(self.market_open_indices))
+
+        return episode
+
+
+    def get_tick_window(self):
+        market_open_index = self.market_open_indices[self.episode]
+
+        if self.episode == len(self.market_open_indices) - 1:
             market_close_index = len(self.date_times) - 1
         else:
-            market_close_index = market_open_indexes[market_open + 1] - 1
+            market_close_index = self.market_open_indices[self.episode + 1] - 1
 
         return market_open_index + self.window_size, market_close_index
 

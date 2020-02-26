@@ -1,19 +1,16 @@
 from __future__ import absolute_import, division, print_function, unicode_literals
 
-import tensorflow as tf
-import pandas as pd
-import matplotlib.pyplot as plt
-
+import argparse
 from main import *
 
 
-policy = tf.compat.v2.saved_model.load(policy_dir)
-print('average reward: {}'.format(eval_policy(policy)))
+arg_parser = argparse.ArgumentParser()
+arg_parser.add_argument('--render', default=False, action='store_true')
+args = arg_parser.parse_args()
 
-"""
-for _ in range(5):
-    time_step = env.reset()
-    while not time_step.is_last():
-        time_step = env.step(policy.action(time_step).action)
-    env.render()
-"""
+render = args.render
+
+
+policy = tf.compat.v2.saved_model.load(policy_dir)
+
+print('average reward: {:.6f}'.format(eval_policy(policy, render=render)))

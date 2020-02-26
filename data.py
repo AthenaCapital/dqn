@@ -2,9 +2,10 @@ from __future__ import absolute_import, division, print_function, unicode_litera
 
 import pandas as pd
 
+
 train_data_path = 'data/train.csv'
-test_data_path = 'data/test.csv'
+eval_data_path = 'data/eval.csv'
 
 
-train_data = pd.read_csv(train_data_path)
-test_data = pd.read_csv(test_data_path)
+train_data = pd.read_csv(train_data_path, index_col=0)
+eval_data = pd.read_csv(eval_data_path, index_col=0)

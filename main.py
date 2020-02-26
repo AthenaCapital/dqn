@@ -14,25 +14,26 @@ from stock_trading_env import *
 
 
 window_size = 10
-network_shape = (128,128,)
 
-num_eval_episodes = 5
+num_eval_episodes = 30
 
-replay_buffer_max_length = 100000
+network_shape = (128, 128,)
 learning_rate = 1e-3
 
-checkpoint_dir = 'checkpoint'
-log_path = checkpoint_dir + '/log.csv'
+tau = 0.1
+gradient_clipping = 1
+
 policy_dir = 'policy'
 
 
-env = gym_wrapper.GymWrapper(StockTradingEnv(df=train_data, window_size=window_size))
+train_py_env = gym_wrapper.GymWrapper(StockTradingEnv(df=train_data, window_size=window_size))
+eval_py_env = gym_wrapper.GymWrapper(StockTradingEnv(df=eval_data, window_size=window_size, eval=True))
 
-train_env = tf_py_environment.TFPyEnvironment(env)
-eval_env = tf_py_environment.TFPyEnvironment(env)
+train_env = tf_py_environment.TFPyEnvironment(train_py_env)
+eval_env = tf_py_environment.TFPyEnvironment(eval_py_env)
 
 
-def eval_policy(policy):
+def eval_policy(policy, render=False):
     total_reward = 0
     for _ in range(num_eval_episodes):
         time_step = eval_env.reset()
@@ -40,8 +41,17 @@ def eval_policy(policy):
         while not time_step.is_last():
             time_step = eval_env.step(policy.action(time_step).action)
             episode_reward += time_step.reward
+
+        if render:
+            eval_py_env.render()
+
         total_reward += episode_reward
+
+    eval_env.close()
+    eval_py_env.close()
+
     avg_reward = total_reward / num_eval_episodes
+
     return avg_reward.numpy()[0]
 
 
@@ -50,5 +60,5 @@ optimizer = tf.compat.v1.train.AdamOptimizer(learning_rate=learning_rate)
 
 global_step = tf.compat.v1.train.get_or_create_global_step()
 
-agent = dqn_agent.DqnAgent(train_env.time_step_spec(), train_env.action_spec(), q_network=q_net, optimizer=optimizer, td_errors_loss_fn=common.element_wise_squared_loss, train_step_counter=global_step)
+agent = dqn_agent.DqnAgent(train_env.time_step_spec(), train_env.action_spec(), q_network=q_net, optimizer=optimizer, target_update_tau=tau, td_errors_loss_fn=common.element_wise_squared_loss, gradient_clipping=gradient_clipping, train_step_counter=global_step)
 agent.initialize()

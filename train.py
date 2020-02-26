@@ -1,27 +1,29 @@
 from __future__ import absolute_import, division, print_function, unicode_literals
 
 import argparse
-import shutil
-import tensorflow as tf
-import pandas as pd
 import matplotlib.pyplot as plt
 
 from tf_agents.drivers import dynamic_step_driver
 from tf_agents.replay_buffers import tf_uniform_replay_buffer
 from tf_agents.policies import policy_saver
 from tf_agents.trajectories import trajectory
-from tf_agents.utils import common
 
 from main import *
 
 
+replay_buffer_max_length = 1000000
+collect_steps_per_iteration = 10
+
+checkpoint_dir = 'checkpoint'
+
 num_iterations = 5000
 batch_size = 256
 
-collect_steps_per_iteration = 1
-
 log_interval = 100
 eval_interval = 1000
+
+log_path = checkpoint_dir + '/log.csv'
+plot_path = checkpoint_dir + '/plot.png'
 
 
 arg_parser = argparse.ArgumentParser()
@@ -51,47 +53,54 @@ iterator = iter(dataset)
 
 
 try:
-    log = pd.read_csv(log_path)
-    steps = log['step'].tolist()
-    rewards = log['avg reward'].tolist()
+    df = pd.read_csv(log_path, index_col='step')
 except:
-    steps = []
-    rewards = []
+    df = pd.DataFrame()
+    df.index.name = 'step'
 
 
 agent.train = common.function(agent.train)
 
 for _ in range(num_iterations):
-    for _ in range(collect_steps_per_iteration):
-        collect_driver.run()
+    collect_driver.run()
 
     experience, unused_info = next(iterator)
-    train_loss = agent.train(experience).loss
+    loss = agent.train(experience).loss.numpy()
 
     step = agent.train_step_counter.numpy()
 
     if step % log_interval == 0:
-        print('step {}: loss = {:.6f}'.format(step, train_loss))
+        print('step {}: loss = {}'.format(step, loss))
+
+        df.loc[step, 'loss'] = loss
 
     if step % eval_interval == 0:
         avg_reward = eval_policy(agent.policy)
 
         print('average reward: {:.6f}'.format(avg_reward))
 
-        if not rewards or avg_reward > max(rewards):
+        if not 'avg reward' in df or avg_reward > max(df['avg reward'].dropna()):
             tf_policy_saver.save(policy_dir)
 
-        steps.append(step)
-        rewards.append(avg_reward)
-
+        df.loc[step, 'avg reward'] = avg_reward
 
 train_checkpointer.save(global_step)
 
-log = pd.DataFrame({'step': steps, 'avg reward': rewards})
-log.to_csv(log_path)
 
-plt.plot(steps, rewards)
-plt.ylabel('avg reward')
+df.to_csv(log_path)
+
+plt.figure(figsize=(12, 6))
+
+plt.subplot(1, 2, 1)
+plt.plot(df['loss'])
 plt.xlabel('step')
+plt.title('loss')
+
+plt.subplot(1, 2, 2)
+plt.plot(df['avg reward'].dropna())
+plt.xlabel('step')
+plt.title('avg reward')
+
 plt.tight_layout()
+plt.savefig(plot_path)
 plt.show()
